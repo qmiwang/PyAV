@@ -52,6 +52,8 @@ cdef class Container(object):
     cdef readonly dict container_options
     cdef readonly list stream_options
 
+    cdef dict hwaccel
+
     cdef ContainerProxy proxy
     cdef object __weakref__
 

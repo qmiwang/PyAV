@@ -42,6 +42,11 @@ if [[ "$TRAVIS" ]]; then
     if [[ "$TRAVIS_PYTHON_VERSION" = "2.7" || "$TRAVIS_PYTHON_VERSION" = "pypy" ]]; then
         PYAV_PYTHON=python
     fi
+
+elif [[ "$CONDA_PREFIX" ]]; then
+
+    echo "Found Conda - skipping virtualenv setup"
+
 else
 
     export PYAV_VENV_NAME="$(uname -s).$(uname -r).$("$PYAV_PYTHON" -c '
@@ -78,6 +83,7 @@ if [[ ! "$PYAV_LIBRARY_BUILD_ROOT" && -d /vagrant ]]; then
 fi
 export PYAV_LIBRARY_ROOT="${PYAV_LIBRARY_ROOT-$PYAV_ROOT/vendor}"
 export PYAV_LIBRARY_BUILD="${PYAV_LIBRARY_BUILD-$PYAV_LIBRARY_ROOT/build}"
+export PYAV_LIBRARY_BIN="${PYAV_LIBRARY_BIN-$PYAV_LIBRARY_ROOT/bin}"
 export PYAV_LIBRARY_PREFIX="$PYAV_LIBRARY_BUILD/$PYAV_LIBRARY"
 
 # Signal to setup.py

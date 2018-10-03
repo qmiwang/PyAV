@@ -8,7 +8,7 @@ from distutils.errors import DistutilsExecError
 from distutils.msvccompiler import MSVCCompiler
 from setuptools import setup, find_packages, Extension, Distribution
 from setuptools.command.build_ext import build_ext
-from subprocess import Popen, PIPE
+from subprocess import Popen, PIPE, check_output
 from textwrap import dedent
 import argparse
 import errno
@@ -257,7 +257,9 @@ else:
 
 
 def compile_check(code, name, includes=None, include_dirs=None, libraries=None,
-                  library_dirs=None, runtime_library_dirs=None, link=True, compiler=None, force=False, verbose=False):
+                  library_dirs=None, runtime_library_dirs=None, link=None,
+                  exec_=False, compiler=None, force=False, verbose=False,
+    ):
     """Check that we can compile and link the given source.
 
     Caches results; delete the ``build`` directory to reset.
@@ -266,6 +268,12 @@ def compile_check(code, name, includes=None, include_dirs=None, libraries=None,
     and cached results (``*.json``) in ``build/temp.$platform/reflection``.
 
     """
+
+    if link is None:
+        link = True
+    if exec_ and not link:
+        raise ValueError("Cannot exec without link.")
+
     exec_path = name + '.out'
     source_path = name + '.c'
     result_path = name + '.json'
@@ -283,18 +291,18 @@ def compile_check(code, name, includes=None, include_dirs=None, libraries=None,
             fh.write("#define inline __inline\n")
         for include in includes or ():
             fh.write('#include "%s"\n' % include)
-        fh.write('main(int argc, char **argv)\n{ %s; }\n' % code)
+        fh.write('int main(int argc, char **argv)\n{ %s; }\n' % code)
 
-
+    res = True
     try:
         objects = cc.compile([source_path], include_dirs=include_dirs)
         if link:
             cc.link_executable(objects, exec_path, libraries=libraries,
                 library_dirs=library_dirs, runtime_library_dirs=runtime_library_dirs)
+        if exec_:
+            res = check_output(exec_path).decode()
     except (CompileError, LinkError, TypeError):
         res = False
-    else:
-        res = True
 
     with open(result_path, 'w') as fh:
         fh.write(json.dumps(res))
@@ -530,15 +538,68 @@ class ReflectCommand(Command):
 
         reflection_includes = [
             'libavcodec/avcodec.h',
+            'libavdevice/avdevice.h',
+            'libavfilter/avfilter.h',
+            'libavfilter/avfilter.h',
             'libavformat/avformat.h',
             'libavutil/avutil.h',
             'libavutil/opt.h',
+            'libswresample/swresample.h',
+            'libswscale/swscale.h',
         ]
 
         config = extension_extra.copy()
         config['include_dirs'] += self.include_dirs
         config['libraries'] += self.libraries
         config['library_dirs'] += self.library_dirs
+
+        compile_kwargs = dict(
+            compiler=self.compiler,
+            includes=reflection_includes,
+            include_dirs=config['include_dirs'],
+            libraries=config['libraries'],
+            library_dirs=config['library_dirs'],
+            runtime_library_dirs=config['runtime_library_dirs'],
+            force=self.force,
+            verbose=self.debug,
+        )
+
+        print("checking library versions...")
+        raw_versions = compile_check(
+            name=os.path.join(tmp_dir, 'library_versions'),
+            code=r'''
+                #include <stdio.h>
+                printf("{\n");
+                printf("    \"libavutil\": %d,\n", avutil_version());
+                printf("    \"libavcodec\": %d,\n", avcodec_version());
+                printf("    \"libavformat\": %d,\n", avformat_version());
+                printf("    \"libavdevice\": %d,\n", avdevice_version());
+                printf("    \"libavfilter\": %d,\n", avfilter_version());
+                printf("    \"libswscale\": %d,\n", swscale_version());
+                printf("    \"libswresample\": %d\n", swresample_version());
+                printf("}\n");
+            ''',
+            exec_=True,
+            **compile_kwargs
+        )
+        if not raw_versions:
+            print("We could not get the versions of the library.")
+            print_diagnostic_message()
+            exit(1)
+
+        bitbashed_versions = json.loads(raw_versions)
+
+        def decode_version(v):
+            if v < 0:
+                return (-1, -1, -1)
+            major = (v >> 16) & 0xff
+            minor = (v >> 8) & 0xff
+            micro = (v) & 0xff
+            return (major, minor, micro)
+
+        versions = {k: decode_version(v) for k, v in bitbashed_versions.items()}
+        for k, v in sorted(versions.items()):
+            print("found {:13s} {:3d}.{:3d}.{:3d}".format(k, *v))
 
         # Check for some specific functions.
         for func_name in (
@@ -557,12 +618,7 @@ class ReflectCommand(Command):
             results[func_name] = compile_check(
                 name=os.path.join(tmp_dir, func_name),
                 code='%s()' % func_name,
-                libraries=config['libraries'],
-                library_dirs=config['library_dirs'],
-                runtime_library_dirs=config['runtime_library_dirs'],
-                compiler=self.compiler,
-                force=self.force,
-                verbose=self.debug,
+                **compile_kwargs
             )
             print('found' if results[func_name] else 'missing')
 
@@ -578,12 +634,8 @@ class ReflectCommand(Command):
             results[enum_name] = compile_check(
                 name=os.path.join(tmp_dir, enum_name),
                 code='int x = %s' % enum_name,
-                includes=reflection_includes,
-                include_dirs=config['include_dirs'],
                 link=False,
-                compiler=self.compiler,
-                force=self.force,
-                verbose=self.debug,
+                **compile_kwargs
             )
             print("found" if results[enum_name] else "missing")
 

@@ -274,7 +274,7 @@ def compile_check(code, name, includes=None, include_dirs=None, libraries=None,
     if exec_ and not link:
         raise ValueError("Cannot exec without link.")
 
-    exec_path = name + '.out'
+    exec_path = name + '.exe'
     source_path = name + '.c'
     result_path = name + '.json'
 
@@ -570,14 +570,15 @@ class ReflectCommand(Command):
             code=r'''
                 #include <stdio.h>
                 printf("{\n");
-                printf("    \"libavutil\": %d,\n", avutil_version());
                 printf("    \"libavcodec\": %d,\n", avcodec_version());
-                printf("    \"libavformat\": %d,\n", avformat_version());
                 printf("    \"libavdevice\": %d,\n", avdevice_version());
                 printf("    \"libavfilter\": %d,\n", avfilter_version());
-                printf("    \"libswscale\": %d,\n", swscale_version());
-                printf("    \"libswresample\": %d\n", swresample_version());
+                printf("    \"libavformat\": %d,\n", avformat_version());
+                printf("    \"libavutil\": %d,\n", avutil_version());
+                printf("    \"libswresample\": %d,\n", swresample_version());
+                printf("    \"libswscale\": %d\n", swscale_version());
                 printf("}\n");
+                return 0;
             ''',
             exec_=True,
             **compile_kwargs
@@ -599,7 +600,7 @@ class ReflectCommand(Command):
 
         versions = {k: decode_version(v) for k, v in bitbashed_versions.items()}
         for k, v in sorted(versions.items()):
-            print("found {:13s} {:3d}.{:3d}.{:3d}".format(k, *v))
+            print("\t{:13s} {:3d}.{:3d}.{:3d}".format(k, *v))
 
         # Check for some specific functions.
         for func_name in (

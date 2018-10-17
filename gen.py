@@ -42,8 +42,19 @@ for name in '''
     installation.html
 '''.strip().split():
     with open(name, 'w') as fh:
-        fh.write('''---
-redirect_to: "https://docs.mikeboers.com/pyav/{}"
----
-'''.format(name))
+        fh.write('''<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Redirecting...</title>
+  <link rel="canonical" href="{url}"/>
+  <meta http-equiv="refresh" content="0;url={url}" />
+</head>
+<body>
+  <h1>Redirecting...</h1>
+  <a href="{url}">Click here if you are not redirected.<a>
+  <script>location='{url}'</script>
+</body>
+</html>
+'''.format(url='https://docs.mikeboers.com/pyav/{}'.format(name)))
 

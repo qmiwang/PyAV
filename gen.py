@@ -56,5 +56,5 @@ for name in '''
   <script>location='{url}'</script>
 </body>
 </html>
-'''.format(url='https://docs.mikeboers.com/pyav/{}'.format(name)))
+'''.format(url='https://docs.mikeboers.com/pyav/develop/{}'.format(name)))
 
